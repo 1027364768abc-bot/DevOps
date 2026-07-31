@@ -1,0 +1,72 @@
+name: Zero-Key Auto Deploy Pipeline
+
+on:
+  push:
+    branches:
+      - main  
+
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+ 
+  ALIYUN_ACCOUNT_ID: "1612262844714561" 
+  
+  
+  ECS_INSTANCE_ID: "i-bp12jrnl2jaybb1ku06q" 
+  
+
+  REGISTRY: "registry.cn-hangzhou.aliyuncs.com"
+  NAMESPACE: "wjthkx1006"  
+  IMAGE_NAME: "my-app"
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 拉取 GitHub 仓库代码
+        uses: actions/checkout@v4
+
+    
+      - name: 2. 阿里云免密 Authentication (OIDC)
+        uses: aliyun/credentials-action@v1
+        with:
+          role-to-assume: acs:ram::${{ env.ALIYUN_ACCOUNT_ID }}:role/GitHubActionsRole
+          oidc-provider-arn: acs:ram::${{ env.ALIYUN_ACCOUNT_ID }}:oidc-provider/GitHub
+          role-session-name: GitHubActionsSession
+          duration-seconds: 3600
+
+     
+      - name: 3. 登录 ACR 镜像服务
+        uses: aliyun/acr-login-action@v1
+        with:
+          login-server: ${{ env.REGISTRY }}
+
+      
+      - name: 4. Build & Push Docker 镜像
+        run: |
+          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          docker build -t $FULL_IMAGE .
+          docker push $FULL_IMAGE
+
+    
+      - name: 5. 远程通知 ECS 拉取镜像并启动容器
+        run: |
+          curl -O https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
+          tar xzvf aliyun-cli-linux-latest-amd64.tgz
+          sudo mv aliyun /usr/local/bin/
+
+          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          
+          # ECS 收到命令后会去拉取最新镜像，并映射到 8080 端口（由 Nginx 做反向代理）
+          DEPLOY_CMD="docker pull $FULL_IMAGE && docker stop my-app || true && docker rm my-app || true && docker run -d --name my-app -p 8080:80 $FULL_IMAGE"
+          ENCODED_CMD=$(echo "$DEPLOY_CMD" | base64 -w 0)
+
+          aliyun ecs RunCommand \
+            --RegionId "cn-hangzhou" \
+            --InstanceId.1 "${{ env.ECS_INSTANCE_ID }}" \
+            --Type "RunShellScript" \
+            --CommandContent "$ENCODED_CMD"
