@@ -33,7 +33,7 @@ jobs:
           oidc-provider-arn: acs:ram::1612262844714561:oidc-provider/GitHub
           role-session-name: GitHubActionsSession
           role-session-expiration: 3600
-          audience: sts.aliyuncs.com
+          audience: sigstore
 
       - name: 3. 登录阿里云 ACR
         uses: docker/login-action@v3
