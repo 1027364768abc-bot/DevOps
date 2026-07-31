@@ -12,9 +12,11 @@ permissions:
 env:
   ALIYUN_ACCOUNT_ID: "1612262844714561"
   ECS_INSTANCE_ID: "i-bp12jrnl2jaybb1ku06q"
+  REGION: "cn-hangzhou"
   REGISTRY: "registry.cn-hangzhou.aliyuncs.com"
   NAMESPACE: "wjthkx1006"
   IMAGE_NAME: "test1-app"
+  CONTAINER_NAME: "test1-app"
 
 jobs:
   build-and-deploy:
@@ -31,33 +33,46 @@ jobs:
           oidc-provider-arn: acs:ram::1612262844714561:oidc-provider/GitHub
           role-session-name: GitHubActionsSession
           role-session-expiration: 3600
+          audience: sts.aliyuncs.com
 
       - name: 3. 登录阿里云 ACR
         uses: docker/login-action@v3
         with:
-          registry: registry.cn-hangzhou.aliyuncs.com
+          registry: ${{ env.REGISTRY }}
           username: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_ID }}
-          password: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
+          password: ${{ env.ALIBABA_CLOUD_SECURITY_TOKEN }}
 
       - name: 4. 构建并推送镜像
         run: |
-          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          docker build -t $FULL_IMAGE .
-          docker push $FULL_IMAGE
+          FULL_IMAGE="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${GITHUB_SHA}"
+          docker build -t "$FULL_IMAGE" .
+          docker push "$FULL_IMAGE"
+          echo "FULL_IMAGE=$FULL_IMAGE" >> "$GITHUB_ENV"
 
-      - name: 5. 调用云助手通知 ECS 自动部署
+      - name: 5. 安装阿里云 CLI
         run: |
-          curl -O https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
-          tar xzvf aliyun-cli-linux-latest-amd64.tgz
-          sudo mv aliyun /usr/local/bin/
+          curl -fsSL -o aliyun-cli-linux-latest-amd64.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
+          tar xzf aliyun-cli-linux-latest-amd64.tgz
+          sudo mv aliyun /usr/local/bin/aliyun
+          aliyun version
 
-          FULL_IMAGE="${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
-          
-          DEPLOY_CMD="docker pull $FULL_IMAGE && docker stop test1-app || true && docker rm test1-app || true && docker run -d --name test1-app -p 80:80 $FULL_IMAGE"
-          ENCODED_CMD=$(echo "$DEPLOY_CMD" | base64 -w 0)
+      - name: 6. 配置阿里云 CLI 临时凭证
+        run: |
+          aliyun configure set \
+            --profile default \
+            --mode StsToken \
+            --region "$REGION" \
+            --access-key-id "$ALIBABA_CLOUD_ACCESS_KEY_ID" \
+            --access-key-secret "$ALIBABA_CLOUD_ACCESS_KEY_SECRET" \
+            --sts-token "$ALIBABA_CLOUD_SECURITY_TOKEN"
+
+      - name: 7. 调用云助手通知 ECS 自动部署
+        run: |
+          DEPLOY_CMD="docker pull ${FULL_IMAGE} && docker stop ${CONTAINER_NAME} || true && docker rm ${CONTAINER_NAME} || true && docker run -d --name ${CONTAINER_NAME} -p 80:80 ${FULL_IMAGE}"
+          ENCODED_CMD=$(printf '%s' "$DEPLOY_CMD" | base64 -w 0)
 
           aliyun ecs RunCommand \
-            --RegionId "cn-hangzhou" \
-            --InstanceId.1 "${{ env.ECS_INSTANCE_ID }}" \
+            --RegionId "$REGION" \
+            --InstanceId.1 "$ECS_INSTANCE_ID" \
             --Type "RunShellScript" \
             --CommandContent "$ENCODED_CMD"
