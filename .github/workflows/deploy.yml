@@ -30,15 +30,14 @@ jobs:
           role-to-assume: acs:ram::1612262844714561:role/GitHubActionsRole
           oidc-provider-arn: acs:ram::1612262844714561:oidc-provider/GitHub
           role-session-name: GitHubActionsSession
-          audience: "sigstore"                      # 1. 修复 Audience 匹配问题
-          role-session-expiration: 3600              # 2. 修正参数名为 role-session-expiration
+          role-session-expiration: 3600
 
       - name: 3. 登录阿里云 ACR
         uses: docker/login-action@v3
         with:
           registry: registry.cn-hangzhou.aliyuncs.com
           username: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_ID }}
-          password: ${{ env.ALIBABA_CLOUD_SECURITY_TOKEN }}
+          password: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
 
       - name: 4. 构建并推送镜像
         run: |
