@@ -1,4 +1,4 @@
-name: 零 Key OIDC 自动部署流水线
+﻿name: 零 Key OIDC 自动部署流水线
 
 on:
   push:
@@ -13,7 +13,7 @@ env:
   ALIYUN_ACCOUNT_ID: "1612262844714561"
   ECS_INSTANCE_ID: "i-bp12jrnl2jaybb1ku06q"
   REGISTRY: "registry.cn-hangzhou.aliyuncs.com"
-  NAMESPACE: "wjthkx1006" # 请确认与你在 ACR 控制台建的命名空间一致
+  NAMESPACE: "wjthkx1006"
   IMAGE_NAME: "test1-app"
 
 jobs:
@@ -24,20 +24,18 @@ jobs:
       - name: 1. 拉取代码
         uses: actions/checkout@v4
 
-      # 正确名称：aliyun/configure-aliyun-credentials-action@v1
       - name: 2. 阿里云 OIDC 免密认证
         uses: aliyun/configure-aliyun-credentials-action@v1
         with:
-          role-to-assume: acs:ram::${{ env.ALIYUN_ACCOUNT_ID }}:role/GitHubActionsRole
-          oidc-provider-arn: acs:ram::${{ env.ALIYUN_ACCOUNT_ID }}:oidc-provider/GitHub
+          role-to-assume: acs:ram::1612262844714561:role/GitHubActionsRole
+          oidc-provider-arn: acs:ram::1612262844714561:oidc-provider/GitHub
           role-session-name: GitHubActionsSession
           duration-seconds: 3600
 
-      # 使用通用的官方 docker/login-action 避免找不到 aliyun 专有登录包
       - name: 3. 登录阿里云 ACR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: registry.cn-hangzhou.aliyuncs.com
           username: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_ID }}
           password: ${{ env.ALIBABA_CLOUD_SECURITY_TOKEN }}
 
