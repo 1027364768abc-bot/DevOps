@@ -30,7 +30,8 @@ jobs:
           role-to-assume: acs:ram::1612262844714561:role/GitHubActionsRole
           oidc-provider-arn: acs:ram::1612262844714561:oidc-provider/GitHub
           role-session-name: GitHubActionsSession
-          duration-seconds: 3600
+          audience: "sigstore"                      # 1. 修复 Audience 匹配问题
+          role-session-expiration: 3600              # 2. 修正参数名为 role-session-expiration
 
       - name: 3. 登录阿里云 ACR
         uses: docker/login-action@v3
