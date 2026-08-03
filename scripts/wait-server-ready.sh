@@ -42,6 +42,7 @@ INVOKE_ID="$(
     --InstanceId.1 "$INSTANCE_ID" \
     --Type RunShellScript \
     --CommandContent "$ENCODED" \
+    --ContentEncoding Base64 \
     --Timeout 700 \
     --Name wait-docker-ready |
     jq -r '.InvokeId // empty'
@@ -59,6 +60,7 @@ dump_diagnostics() {
       --InstanceId.1 "$INSTANCE_ID" \
       --Type RunShellScript \
       --CommandContent "$ENCODED_DUMP" \
+      --ContentEncoding Base64 \
       --Timeout 60 2>/dev/null |
       jq -r '.InvokeId // empty'
   )"

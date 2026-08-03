@@ -119,6 +119,7 @@ jobs:
             --RegionId "$REGION" \
             --InstanceId.1 "$ECS_INSTANCE_ID" \
             --Type "RunShellScript" \
+            --ContentEncoding Base64 \
             --EnableParameter true \
             --Parameter "$PARAM_JSON" \
             --CommandContent "$ENCODED_CMD" \
