@@ -31,6 +31,14 @@ OIDC 角色 `GitHubActionsRole`（已在阿里云 RAM 控制台配置信任 GitH
 
 > 说明：Terraform 状态存放在 OSS 桶 `devops-tfstate-1612262844714561`，流水线首次运行时自动创建。
 
+### ACR 登录凭据（个人版限制）
+
+ACR **个人版不支持 OIDC/STS 临时凭证登录**（官方限制），推镜像必须使用固定密码。
+请在 GitHub 仓库 Settings → Secrets and variables → Actions 中配置两个 Secret：
+
+- `ACR_USERNAME`：阿里云账号登录名（控制台 ACR 个人版 → 访问凭证可查看）
+- `ACR_PASSWORD`：ACR 固定密码（控制台 ACR 个人版 → 访问凭证 → 设置固定密码）
+
 ### 角色信任策略（重要坑点）
 
 角色名实际为 `githubactionsrole`（全小写），其信任策略必须放行 GitHub OIDC 担任该角色。
