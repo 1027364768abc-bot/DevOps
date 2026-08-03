@@ -121,7 +121,7 @@ jobs:
             --Type "RunShellScript" \
             --ContentEncoding Base64 \
             --EnableParameter true \
-            --Parameter "$PARAM_JSON" \
+            --Parameters "$PARAM_JSON" \
             --CommandContent "$ENCODED_CMD" \
             --Name deploy-frontend
 
