@@ -31,6 +31,37 @@ OIDC 角色 `GitHubActionsRole`（已在阿里云 RAM 控制台配置信任 GitH
 
 > 说明：Terraform 状态存放在 OSS 桶 `devops-tfstate-1612262844714561`，流水线首次运行时自动创建。
 
+### 角色信任策略（重要坑点）
+
+角色名实际为 `githubactionsrole`（全小写），其信任策略必须放行 GitHub OIDC 担任该角色。
+**GitHub 的 `sub` 声明格式包含账号 ID 和仓库 ID**（形如
+`repo:owner@ownerId/repo@repoId:...`），通配符必须放在仓库 ID 之后，否则 AssumeRole 会报
+`AuthenticationFail.NoPermission`。当前仓库对应的完整信任策略：
+
+```json
+{
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Effect": "Allow",
+      "Principal": {
+        "Federated": "acs:ram::1612262844714561:oidc-provider/GitHub"
+      },
+      "Condition": {
+        "StringEquals": {
+          "oidc:aud": "sigstore",
+          "oidc:iss": "https://token.actions.githubusercontent.com"
+        },
+        "StringLike": {
+          "oidc:sub": "repo:1027364768abc-bot@268580485/DevOps@1321269390:*"
+        }
+      }
+    }
+  ],
+  "Version": "1"
+}
+```
+
 ## 注意事项
 
 - **首次运行会重建服务器**：本次改造给 ECS 增加了 `user_data`（cloud-init），
