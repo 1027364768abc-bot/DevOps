@@ -79,12 +79,9 @@ jobs:
           echo "ECS_INSTANCE_ID=$(terraform output -raw ecs_instance_id)" >> "$GITHUB_ENV"
           echo "ECS_PUBLIC_IP=$(terraform output -raw ecs_public_ip)" >> "$GITHUB_ENV"
 
-      - name: 9. 登录阿里云 ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_ID }}
-          password: ${{ env.ALIBABA_CLOUD_SECURITY_TOKEN }}
+      - name: 9. 登录阿里云 ACR（OIDC 临时凭证）
+        run: |
+          echo "${ALIBABA_CLOUD_SECURITY_TOKEN}" | docker login --username "${ALIBABA_CLOUD_ACCESS_KEY_ID}" --password-stdin "$REGISTRY"
 
       - name: 10. 构建并推送镜像
         run: |
