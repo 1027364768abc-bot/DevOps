@@ -98,7 +98,24 @@ jobs:
 
       - name: 12. 云助手自动部署容器到新服务器
         run: |
-          DEPLOY_CMD="docker pull ${FULL_IMAGE} && docker stop ${CONTAINER_NAME} || true && docker rm ${CONTAINER_NAME} || true && docker run -d --name ${CONTAINER_NAME} -p 80:80 ${FULL_IMAGE}"
+          DEPLOY_CMD=$(cat <<EOF
+          set -e
+          # 确保 ACR 免密拉取助手就绪（幂等，配合 ECS 绑定的 RAM 角色）
+          mkdir -p /root/.docker
+          [ -x /usr/local/bin/docker-credential-acr ] || curl -fsSL -o /usr/local/bin/docker-credential-acr https://aliyun-acr-helper.oss-cn-hangzhou.aliyuncs.com/docker-credential-acr-linux-amd64
+          chmod +x /usr/local/bin/docker-credential-acr
+          printf '{"credsStore": "acr"}' > /root/.docker/config.json
+          # 拉取镜像（重试 5 次，等待角色/网络就绪）
+          for attempt in 1 2 3 4 5; do
+            docker pull ${FULL_IMAGE} && break
+            sleep 10
+          done
+          docker pull ${FULL_IMAGE}
+          docker stop ${CONTAINER_NAME} || true
+          docker rm ${CONTAINER_NAME} || true
+          docker run -d --name ${CONTAINER_NAME} -p 80:80 ${FULL_IMAGE}
+          EOF
+          )
           ENCODED_CMD=$(printf '%s' "$DEPLOY_CMD" | base64 -w 0)
 
           aliyun ecs RunCommand \

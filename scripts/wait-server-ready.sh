@@ -33,7 +33,7 @@ done
 [ "$STATUS" = "Running" ] || { echo "ERROR: instance did not reach Running in time" >&2; exit 1; }
 
 echo "==> waiting for cloud-init / Docker readiness"
-READY_CMD='for i in $(seq 1 120); do docker version >/dev/null 2>&1 && { echo READY; exit 0; }; sleep 5; done; echo NOT_READY; exit 1'
+READY_CMD='for i in $(seq 1 120); do [ -f /opt/cloud-init-done ] && docker version >/dev/null 2>&1 && { echo READY; exit 0; }; sleep 5; done; echo NOT_READY; exit 1'
 ENCODED="$(printf '%s' "$READY_CMD" | base64 -w 0)"
 
 INVOKE_ID="$(
