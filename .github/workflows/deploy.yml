@@ -35,7 +35,7 @@ jobs:
       - name: 3. 阿里云 OIDC 免密认证
         uses: aliyun/configure-aliyun-credentials-action@v1
         with:
-          role-to-assume: acs:ram::1612262844714561:role/GitHubActionsRole
+          role-to-assume: acs:ram::1612262844714561:role/githubactionsrole
           oidc-provider-arn: acs:ram::1612262844714561:oidc-provider/GitHub
           role-session-name: GitHubActionsSession
           role-session-expiration: 3600
