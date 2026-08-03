@@ -48,7 +48,7 @@ jobs:
         with:
           terraform_version: 1.15.8
 
-      - name: 6. 销毁全部资源（ECS / VPC / 安全组 / RAM 角色）
+      - name: 6. 销毁 Terraform 资源（ECS / VPC / 安全组 / RAM 角色）
         working-directory: aliyun-terraform
         run: |
           export ALICLOUD_ACCESS_KEY_ID="$ALIBABA_CLOUD_ACCESS_KEY_ID"
@@ -57,7 +57,21 @@ jobs:
           terraform init -input=false
           terraform destroy -auto-approve -input=false
 
-      - name: 7. 确认本项目 ECS 已全部释放
+      - name: 7. 删除 OSS 状态桶（含状态文件）
+        run: |
+          TF_BUCKET="devops-tfstate-1612262844714561"
+          # 先清空对象，再删 bucket（幂等：bucket 不存在时忽略错误）
+          aliyun oss rm -r -f "oss://${TF_BUCKET}/" --region "$REGION" >/dev/null 2>&1 || true
+          aliyun oss rm -b -f "oss://${TF_BUCKET}" --region "$REGION" >/dev/null 2>&1 || \
+            aliyun oss rm -r -f "oss://${TF_BUCKET}" --region "$REGION" >/dev/null 2>&1 || true
+          # 校验确实已删除
+          if aliyun oss ls "oss://${TF_BUCKET}" --region "$REGION" >/dev/null 2>&1; then
+            echo "ERROR: 状态桶 ${TF_BUCKET} 仍然存在" >&2
+            exit 1
+          fi
+          echo "OSS 状态桶 ${TF_BUCKET} 已删除"
+
+      - name: 8. 确认本项目 ECS 已全部释放
         run: |
           LEFTOVER=$(aliyun ecs DescribeInstances --RegionId "$REGION" | jq -r '.Instances.Instance[]? | select(.InstanceName == "devops-ecs-node") | .InstanceId')
           if [ -n "$LEFTOVER" ]; then
