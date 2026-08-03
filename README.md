@@ -82,9 +82,9 @@ ECS 用 RAM 角色免密拉取**（`docker-credential-acr` 对 `crpi-` 域名无
 
 ## 注意事项
 
-- **首次运行会重建服务器**：本次改造给 ECS 增加了 `user_data`（cloud-init），
-  Terraform 检测到该变更会**重建实例并释放旧服务器**，公网 IP 会变化。
-  后续推送若无基础设施变更则复用同一台。
+- **测试阶段每次推送都会重建服务器**：cloud-init 的 `runcmd` 只在实例首次启动执行，
+  因此流水线用 `terraform apply -replace` 强制重建 ECS，保证初始化脚本一定生效，
+  代价是公网 IP 每次都会变化。流程稳定后可去掉 `-replace` 复用同一台实例。
 - 若需要固定公网 IP，可给 ECS 增加弹性公网 IP（EIP），避免重建后地址变化。
 - 前端 `nginx.conf` 里 `/api/` 代理指向已有后端 `114.55.94.221:8082`，不受影响。
 

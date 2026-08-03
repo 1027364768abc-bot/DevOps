@@ -69,7 +69,9 @@ jobs:
           export ALICLOUD_ACCESS_KEY_SECRET="$ALIBABA_CLOUD_ACCESS_KEY_SECRET"
           export ALICLOUD_SECURITY_TOKEN="$ALIBABA_CLOUD_SECURITY_TOKEN"
           terraform init -input=false
-          terraform apply -auto-approve -input=false
+          # 测试阶段每次强制重建 ECS：cloud-init 的 runcmd 只在首次启动执行，
+          # 重建保证新 user_data 一定生效（公网 IP 会变化）。
+          terraform apply -auto-approve -input=false -replace=alicloud_instance.ecs
           echo "ECS_INSTANCE_ID=$(terraform output -raw ecs_instance_id)" >> "$GITHUB_ENV"
           echo "ECS_PUBLIC_IP=$(terraform output -raw ecs_public_ip)" >> "$GITHUB_ENV"
 

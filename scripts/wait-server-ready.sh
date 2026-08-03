@@ -48,6 +48,47 @@ INVOKE_ID="$(
 )"
 [ -n "$INVOKE_ID" ] || { echo "ERROR: failed to invoke readiness command" >&2; exit 1; }
 
+# 就绪失败时收集 ECS 上的诊断信息（cloud-init 状态、Docker、初始化日志）
+dump_diagnostics() {
+  echo "==> collecting diagnostics from instance ${INSTANCE_ID}"
+  DUMP_CMD='echo "--- cloud-init status ---"; cloud-init status --long 2>&1; echo; echo "--- marker ---"; ls -l /opt/cloud-init-done 2>&1; echo; echo "--- docker ---"; docker --version 2>&1; systemctl is-active docker 2>&1; echo; echo "--- devops-init.log ---"; tail -n 120 /var/log/devops-init.log 2>&1; echo; echo "--- cloud-init-output.log ---"; tail -n 120 /var/log/cloud-init-output.log 2>&1'
+  ENCODED_DUMP="$(printf '%s' "$DUMP_CMD" | base64 -w 0)"
+  DUMP_INVOKE_ID="$(
+    aliyun ecs RunCommand \
+      --RegionId "$REGION" \
+      --InstanceId.1 "$INSTANCE_ID" \
+      --Type RunShellScript \
+      --CommandContent "$ENCODED_DUMP" \
+      --Timeout 60 2>/dev/null |
+      jq -r '.InvokeId // empty'
+  )"
+  [ -n "$DUMP_INVOKE_ID" ] || { echo "WARN: failed to invoke diagnostics" >&2; return; }
+  for _ in $(seq 1 20); do
+    DUMP_STATUS="$(
+      aliyun ecs DescribeInvocations \
+        --RegionId "$REGION" \
+        --InvokeId "$DUMP_INVOKE_ID" 2>/dev/null |
+        jq -r '.Invocations.Invocation[0].InvocationStatus // empty'
+    )"
+    case "$DUMP_STATUS" in
+      Success | Failed | PartialFailed) break ;;
+    esac
+    sleep 3
+  done
+  OUT="$(
+    aliyun ecs DescribeInvocationResults \
+      --RegionId "$REGION" \
+      --InvokeId "$DUMP_INVOKE_ID" 2>/dev/null |
+      jq -r '.Invocation.InvocationResults.InvocationResult[0].Output // empty'
+  )"
+  if [ -n "$OUT" ]; then
+    printf '%s' "$OUT" | base64 -d 2>/dev/null || echo "WARN: cannot decode diagnostics output" >&2
+    echo
+  else
+    echo "WARN: no diagnostics output returned" >&2
+  fi
+}
+
 INVOKE_STATUS=""
 for _ in $(seq 1 150); do
   INVOKE_STATUS="$(
@@ -59,11 +100,11 @@ for _ in $(seq 1 150); do
   echo "    invoke status: ${INVOKE_STATUS:-unknown}"
   case "$INVOKE_STATUS" in
     Success) break ;;
-    Failed | PartialFailed) echo "ERROR: readiness command failed" >&2; exit 1 ;;
+    Failed | PartialFailed) echo "ERROR: readiness command failed" >&2; dump_diagnostics; exit 1 ;;
   esac
   sleep 5
 done
-[ "$INVOKE_STATUS" = "Success" ] || { echo "ERROR: timeout waiting for Docker" >&2; exit 1; }
+[ "$INVOKE_STATUS" = "Success" ] || { echo "ERROR: timeout waiting for Docker" >&2; dump_diagnostics; exit 1; }
 
 EXIT_CODE="$(
   aliyun ecs DescribeInvocationResults \
@@ -71,6 +112,6 @@ EXIT_CODE="$(
     --InvokeId "$INVOKE_ID" |
     jq -r '.Invocation.InvocationResults.InvocationResult[0].ExitCode // empty'
 )"
-[ "$EXIT_CODE" = "0" ] || { echo "ERROR: Docker readiness exit code ${EXIT_CODE:-unknown}" >&2; exit 1; }
+[ "$EXIT_CODE" = "0" ] || { echo "ERROR: Docker readiness exit code ${EXIT_CODE:-unknown}" >&2; dump_diagnostics; exit 1; }
 
 echo "==> server ${INSTANCE_ID} is ready"

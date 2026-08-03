@@ -81,8 +81,9 @@ resource "alicloud_instance" "ecs" {
   vswitch_id                 = alicloud_vswitch.vswitch.id
   internet_max_bandwidth_out = 5
 
-  # cloud-init：新服务器一开机就装好 Docker + ACR 免密拉取助手，
-  # 替代原来手工跑 Ansible 的初始化步骤。
+  # cloud-init：新服务器一开机就装好 Docker。
+  # 注意：runcmd 仅在实例首次启动时执行，因此流水线每次 apply 用
+  # -replace 强制重建实例，保证新脚本一定生效。
   user_data = <<EOF
 #cloud-config
 package_update: true
@@ -90,13 +91,10 @@ packages:
   - curl
   - git
 runcmd:
-  - curl -fsSL https://get.docker.com | sh
-  - curl -fsSL -o /usr/local/bin/docker-credential-acr https://aliyun-acr-helper.oss-cn-hangzhou.aliyuncs.com/docker-credential-acr-linux-amd64
-  - chmod +x /usr/local/bin/docker-credential-acr
-  - mkdir -p /root/.docker
-  - printf '{"credsStore": "acr"}' > /root/.docker/config.json
-  - systemctl enable --now docker
-  - touch /opt/cloud-init-done
+  - bash -c 'echo "== devops-init start $(date -u)" > /var/log/devops-init.log'
+  - bash -c 'for i in 1 2 3; do echo "--- docker install attempt $i ---" >> /var/log/devops-init.log; curl -fsSL https://get.docker.com | sh >> /var/log/devops-init.log 2>&1 && break; sleep 20; done'
+  - bash -c 'systemctl enable --now docker >> /var/log/devops-init.log 2>&1'
+  - bash -c 'docker version >> /var/log/devops-init.log 2>&1 && touch /opt/cloud-init-done && echo "== devops-init done $(date -u)" >> /var/log/devops-init.log'
 EOF
 }
 
