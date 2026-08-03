@@ -94,7 +94,11 @@ packages:
   - gnupg
 runcmd:
   - bash -c 'echo "== devops-init start $(date -u)" > /var/log/devops-init.log'
-  - bash -c 'mkdir -p /usr/share/keyrings; for i in 1 2 3; do echo "--- docker install attempt $i ---" >> /var/log/devops-init.log; curl -fsSL https://mirrors.cloud.aliyuncs.com/docker-ce/linux/ubuntu/gpg | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://mirrors.cloud.aliyuncs.com/docker-ce/linux/ubuntu $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list && apt-get update >> /var/log/devops-init.log 2>&1 && apt-get install -y docker-ce docker-ce-cli containerd.io >> /var/log/devops-init.log 2>&1 && break; sleep 20; done'
+  - bash -c 'mkdir -p /usr/share/keyrings'
+  - bash -c 'for i in 1 2 3; do echo "--- add docker repo attempt $i ---" >> /var/log/devops-init.log; (curl -fsSL http://mirrors.cloud.aliyuncs.com/docker-ce/linux/ubuntu/gpg || curl -fsSL https://mirrors.aliyun.com/docker-ce/linux/ubuntu/gpg) | gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg && break; sleep 20; done'
+  - bash -c 'ARCH=$(dpkg --print-architecture); DISTRO=$(. /etc/os-release && echo $VERSION_CODENAME); printf "deb [arch=%s signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] http://mirrors.cloud.aliyuncs.com/docker-ce/linux/ubuntu %s stable\ndeb [arch=%s signed-by=/usr/share/keyrings/docker-archive-keyring.gpg] https://mirrors.aliyun.com/docker-ce/linux/ubuntu %s stable\n" "$ARCH" "$DISTRO" "$ARCH" "$DISTRO" > /etc/apt/sources.list.d/docker.list; cat /etc/apt/sources.list.d/docker.list >> /var/log/devops-init.log'
+  - bash -c 'for i in 1 2 3; do echo "--- apt update attempt $i ---" >> /var/log/devops-init.log; apt-get update >> /var/log/devops-init.log 2>&1 && break; sleep 20; done'
+  - bash -c 'for i in 1 2 3; do echo "--- docker install attempt $i ---" >> /var/log/devops-init.log; apt-get install -y docker-ce docker-ce-cli containerd.io >> /var/log/devops-init.log 2>&1 && break; sleep 20; done'
   - bash -c 'systemctl enable --now docker >> /var/log/devops-init.log 2>&1'
   - bash -c 'docker version >> /var/log/devops-init.log 2>&1 && touch /opt/cloud-init-done && echo "== devops-init done $(date -u)" >> /var/log/devops-init.log'
 EOF
