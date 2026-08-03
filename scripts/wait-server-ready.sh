@@ -33,7 +33,7 @@ done
 [ "$STATUS" = "Running" ] || { echo "ERROR: instance did not reach Running in time" >&2; exit 1; }
 
 echo "==> waiting for cloud-init / Docker readiness"
-READY_CMD='for i in $(seq 1 120); do [ -f /opt/cloud-init-done ] && docker version >/dev/null 2>&1 && { echo READY; exit 0; }; sleep 5; done; echo NOT_READY; exit 1'
+READY_CMD='for i in $(seq 1 180); do [ -f /opt/cloud-init-done ] && docker version >/dev/null 2>&1 && { echo READY; exit 0; }; sleep 5; done; echo NOT_READY; exit 1'
 ENCODED="$(printf '%s' "$READY_CMD" | base64 -w 0)"
 
 INVOKE_ID="$(
@@ -43,7 +43,7 @@ INVOKE_ID="$(
     --Type RunShellScript \
     --CommandContent "$ENCODED" \
     --ContentEncoding Base64 \
-    --Timeout 700 \
+    --Timeout 1000 \
     --Name wait-docker-ready |
     jq -r '.InvokeId // empty'
 )"
@@ -92,14 +92,16 @@ dump_diagnostics() {
 }
 
 INVOKE_STATUS=""
-for _ in $(seq 1 150); do
+START_TS="$(date +%s)"
+for _ in $(seq 1 200); do
   INVOKE_STATUS="$(
     aliyun ecs DescribeInvocations \
       --RegionId "$REGION" \
       --InvokeId "$INVOKE_ID" |
       jq -r '.Invocations.Invocation[0].InvocationStatus // empty'
   )"
-  echo "    invoke status: ${INVOKE_STATUS:-unknown}"
+  ELAPSED_MIN="$(( ($(date +%s) - START_TS) / 60 ))"
+  echo "    invoke status: ${INVOKE_STATUS:-unknown} (已等待 ${ELAPSED_MIN} 分钟)"
   case "$INVOKE_STATUS" in
     Success) break ;;
     Failed | PartialFailed) echo "ERROR: readiness command failed" >&2; dump_diagnostics; exit 1 ;;
