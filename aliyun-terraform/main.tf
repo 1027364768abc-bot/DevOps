@@ -47,8 +47,8 @@ resource "alicloud_security_group_rule" "allow_http" {
 # 2. ECS 服务器与免密拉取 ACR 的角色
 # --------------------------------------------------------
 resource "alicloud_ram_role" "ecs_role" {
-  role_name = "ECSRoleForACRAuto"
-  document  = <<EOF
+  role_name                   = "ECSRoleForACRAuto"
+  assume_role_policy_document = <<EOF
   {
     "Statement": [
       {
@@ -62,7 +62,7 @@ resource "alicloud_ram_role" "ecs_role" {
     "Version": "1"
   }
   EOF
-  description = "Role for ECS to pull ACR image without password"
+  description                 = "Role for ECS to pull ACR image without password"
 }
 
 resource "alicloud_ram_role_policy_attachment" "attach_acr_readonly" {
@@ -81,7 +81,29 @@ resource "alicloud_instance" "ecs" {
   vswitch_id                 = alicloud_vswitch.vswitch.id
   internet_max_bandwidth_out = 5
 
-  role_name = alicloud_ram_role.ecs_role.role_name
+  # cloud-init：新服务器一开机就装好 Docker + ACR 免密拉取助手，
+  # 替代原来手工跑 Ansible 的初始化步骤。
+  user_data = <<EOF
+#cloud-config
+package_update: true
+packages:
+  - curl
+  - git
+runcmd:
+  - curl -fsSL https://get.docker.com | sh
+  - curl -fsSL -o /usr/local/bin/docker-credential-acr https://aliyun-acr-helper.oss-cn-hangzhou.aliyuncs.com/docker-credential-acr-linux-amd64
+  - chmod +x /usr/local/bin/docker-credential-acr
+  - mkdir -p /root/.docker
+  - printf '{"credsStore": "acr"}' > /root/.docker/config.json
+  - systemctl enable --now docker
+  - touch /opt/cloud-init-done
+EOF
+}
+
+# 给 ECS 绑定 RAM 角色（免密拉取 ACR 镜像）
+resource "alicloud_ecs_ram_role_attachment" "attach_acr_role" {
+  instance_id   = alicloud_instance.ecs.id
+  ram_role_name = alicloud_ram_role.ecs_role.role_name
 }
 
 

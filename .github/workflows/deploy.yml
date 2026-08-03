@@ -1,4 +1,4 @@
-﻿name: 零 Key OIDC 自动部署流水线
+name: 一键创建服务器并部署（Terraform → 镜像 → ECS）
 
 on:
   push:
@@ -11,15 +11,15 @@ permissions:
 
 env:
   ALIYUN_ACCOUNT_ID: "1612262844714561"
-  ECS_INSTANCE_ID: "i-bp12jrnl2jaybb1ku06q"
   REGION: "cn-hangzhou"
   REGISTRY: "registry.cn-hangzhou.aliyuncs.com"
   NAMESPACE: "wjthkx1006"
   IMAGE_NAME: "test1-app"
   CONTAINER_NAME: "test1-app"
+  TF_STATE_BUCKET: "devops-tfstate-1612262844714561"
 
 jobs:
-  build-and-deploy:
+  create-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -35,28 +35,14 @@ jobs:
           role-session-expiration: 3600
           audience: sigstore
 
-      - name: 3. 登录阿里云 ACR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_ID }}
-          password: ${{ env.ALIBABA_CLOUD_SECURITY_TOKEN }}
-
-      - name: 4. 构建并推送镜像
-        run: |
-          FULL_IMAGE="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${GITHUB_SHA}"
-          docker build -t "$FULL_IMAGE" .
-          docker push "$FULL_IMAGE"
-          echo "FULL_IMAGE=$FULL_IMAGE" >> "$GITHUB_ENV"
-
-      - name: 5. 安装阿里云 CLI
+      - name: 3. 安装阿里云 CLI
         run: |
           curl -fsSL -o aliyun-cli-linux-latest-amd64.tgz https://aliyuncli.alicdn.com/aliyun-cli-linux-latest-amd64.tgz
           tar xzf aliyun-cli-linux-latest-amd64.tgz
           sudo mv aliyun /usr/local/bin/aliyun
           aliyun version
 
-      - name: 6. 配置阿里云 CLI 临时凭证
+      - name: 4. 配置阿里云 CLI 临时凭证
         run: |
           aliyun configure set \
             --profile default \
@@ -66,7 +52,45 @@ jobs:
             --access-key-secret "$ALIBABA_CLOUD_ACCESS_KEY_SECRET" \
             --sts-token "$ALIBABA_CLOUD_SECURITY_TOKEN"
 
-      - name: 7. 调用云助手通知 ECS 自动部署
+      - name: 5. 安装 Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+
+      - name: 6. 创建 Terraform 状态存储桶（幂等）
+        run: |
+          aliyun oss mb "oss://${TF_STATE_BUCKET}" --region "$REGION" || echo "bucket 可能已存在，继续"
+          aliyun oss ls "oss://${TF_STATE_BUCKET}" >/dev/null 2>&1 && echo "状态桶 ${TF_STATE_BUCKET} 可用"
+
+      - name: 7. Terraform 创建/更新服务器
+        working-directory: aliyun-terraform
+        run: |
+          export ALICLOUD_ACCESS_KEY_ID="$ALIBABA_CLOUD_ACCESS_KEY_ID"
+          export ALICLOUD_ACCESS_KEY_SECRET="$ALIBABA_CLOUD_ACCESS_KEY_SECRET"
+          export ALICLOUD_SECURITY_TOKEN="$ALIBABA_CLOUD_SECURITY_TOKEN"
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+          echo "ECS_INSTANCE_ID=$(terraform output -raw ecs_instance_id)" >> "$GITHUB_ENV"
+          echo "ECS_PUBLIC_IP=$(terraform output -raw ecs_public_ip)" >> "$GITHUB_ENV"
+
+      - name: 8. 登录阿里云 ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ env.ALIBABA_CLOUD_ACCESS_KEY_ID }}
+          password: ${{ env.ALIBABA_CLOUD_SECURITY_TOKEN }}
+
+      - name: 9. 构建并推送镜像
+        run: |
+          FULL_IMAGE="${REGISTRY}/${NAMESPACE}/${IMAGE_NAME}:${GITHUB_SHA}"
+          docker build -t "$FULL_IMAGE" .
+          docker push "$FULL_IMAGE"
+          echo "FULL_IMAGE=$FULL_IMAGE" >> "$GITHUB_ENV"
+
+      - name: 10. 等待新服务器就绪（实例 Running + Docker 可用）
+        run: bash scripts/wait-server-ready.sh
+
+      - name: 11. 云助手自动部署容器到新服务器
         run: |
           DEPLOY_CMD="docker pull ${FULL_IMAGE} && docker stop ${CONTAINER_NAME} || true && docker rm ${CONTAINER_NAME} || true && docker run -d --name ${CONTAINER_NAME} -p 80:80 ${FULL_IMAGE}"
           ENCODED_CMD=$(printf '%s' "$DEPLOY_CMD" | base64 -w 0)
@@ -76,3 +100,8 @@ jobs:
             --InstanceId.1 "$ECS_INSTANCE_ID" \
             --Type "RunShellScript" \
             --CommandContent "$ENCODED_CMD"
+
+      - name: 12. 输出访问地址
+        run: |
+          echo "部署完成！"
+          echo "前端地址: http://${ECS_PUBLIC_IP}"
