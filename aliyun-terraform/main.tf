@@ -74,7 +74,7 @@ resource "alicloud_ram_role_policy_attachment" "attach_acr_readonly" {
 resource "alicloud_instance" "ecs" {
   availability_zone          = "cn-hangzhou-i"
   security_groups            = [alicloud_security_group.sg.id]
-  instance_type              = "ecs.t6-c1m1.small" # 测试环境最小规格（1 vCPU / 0.5 GiB）
+  instance_type              = "ecs.t6-c1m1.large" # 测试环境最小规格（t6 系列最小档：1 vCPU / 1 GiB）
   system_disk_category       = "cloud_essd"
   image_id                   = "ubuntu_22_04_x64_20G_alibase_20230515.vhd"
   instance_name              = "devops-ecs-node"
