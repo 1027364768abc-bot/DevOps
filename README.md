@@ -10,10 +10,10 @@
 1. OIDC 免密认证阿里云
 2. 创建 OSS 状态桶（不存在时）
 3. Terraform apply：创建/更新 VPC、安全组、RAM 角色、ECS 服务器
-   - 服务器通过 cloud-init 自动安装 Docker + ACR 免密拉取助手
+   - 服务器通过 cloud-init 自动安装 Docker
 4. 构建前端镜像并推送到 ACR
 5. 等待新服务器就绪（实例 Running + Docker 可用）
-6. 云助手 RunCommand 自动拉取镜像并启动容器（80 端口）
+6. 云助手 RunCommand 登录 ACR 拉取镜像并启动容器（80 端口）
 ```
 
 访问地址是流水线日志里的 `ECS_PUBLIC_IP`（即 `http://<公网IP>`）。
@@ -38,6 +38,16 @@ ACR **个人版不支持 OIDC/STS 临时凭证登录**（官方限制），推�
 
 - `ACR_USERNAME`：阿里云账号登录名（控制台 ACR 个人版 → 访问凭证可查看）
 - `ACR_PASSWORD`：ACR 固定密码（控制台 ACR 个人版 → 访问凭证 → 设置固定密码）
+
+当前实例（华东 1 杭州，2024-09 后开通的新个人版）使用**独立域名**：
+
+```text
+crpi-2xt8naw5x975swse.cn-hangzhou.personal.cr.aliyuncs.com
+```
+
+注意新个人版实例不再使用 `registry.cn-hangzhou.aliyuncs.com` 旧域名，且**不支持
+ECS 用 RAM 角色免密拉取**（`docker-credential-acr` 对 `crpi-` 域名无效），
+流水线会在 ECS 上用固定密码 `docker login` 后再拉取镜像。
 
 ### 角色信任策略（重要坑点）
 
