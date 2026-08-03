@@ -79,9 +79,13 @@ jobs:
           echo "ECS_INSTANCE_ID=$(terraform output -raw ecs_instance_id)" >> "$GITHUB_ENV"
           echo "ECS_PUBLIC_IP=$(terraform output -raw ecs_public_ip)" >> "$GITHUB_ENV"
 
-      - name: 9. 登录阿里云 ACR（OIDC 临时凭证）
+      - name: 9. 登录阿里云 ACR（STS 换取临时 Docker 凭据）
         run: |
-          echo "${ALIBABA_CLOUD_SECURITY_TOKEN}" | docker login --username "${ALIBABA_CLOUD_ACCESS_KEY_ID}" --password-stdin "$REGISTRY"
+          CR_RESP=$(aliyun cr GET /tokens --endpoint="cr.${REGION}.aliyuncs.com")
+          DOCKER_USER=$(printf '%s' "$CR_RESP" | jq -r '.data.tempUserName')
+          DOCKER_PASS=$(printf '%s' "$CR_RESP" | jq -r '.data.authorizationToken')
+          echo "已换取 ACR 临时登录凭据（用户: ${DOCKER_USER}）"
+          echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin "$REGISTRY"
 
       - name: 10. 构建并推送镜像
         run: |
